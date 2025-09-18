@@ -1,0 +1,92 @@
+{
+  "log": {
+    "level": "info",
+    "timestamp": true
+  },
+  "dns": {
+    "servers": [
+      {
+		"type": "tcp",
+        "tag": "cloudflare",
+        "server": "1.1.1.1",
+        "detour": "night-ebh0sgf4w"
+      },
+	  {
+        "type": "local",
+        "tag": "local"
+      }
+    ],
+    "strategy": "prefer_ipv4",
+    "final": "cloudflare",
+	"disable_cache": false,
+    "disable_expire": false,
+    "independent_cache": false
+  },
+  "inbounds": [
+    {
+      "type": "tun",
+      "tag": "tun-in",
+      "interface_name": "custom_singbox_tun",
+      "address": [
+        "172.16.0.1/30"
+      ],
+      "mtu": 1500,
+      "auto_route": true,
+      "strict_route": false,
+      "stack": "system",
+      "sniff": true
+    },
+	{
+        "domain_strategy": "ipv4_only",
+		"listen": "127.0.0.1",
+		"listen_port": 2080,
+		"sniff": true,
+		"sniff_override_destination": false,
+		"tag": "mixed-in",
+		"type": "mixed"
+	},
+  ],
+  "outbounds": [
+    {
+      "type": "vless",
+      "tag": "proxy",
+      "server": "",
+      "server_port": 11111,
+      "uuid": "",
+      "flow": "",
+      "tls": {
+        "enabled": true,
+        "server_name": "",
+        "utls": {
+          "enabled": true,
+          "fingerprint": ""
+        },
+        "reality": {
+          "enabled": true,
+          "public_key": "",
+          "short_id": ""
+        }
+      }
+    },
+    {
+      "type": "direct",
+      "tag": "direct"
+    },
+    {
+      "type": "block",
+      "tag": "block"
+    }
+  ],
+  "route": {
+    "auto_detect_interface": true,
+	"default_domain_resolver": "cloudflare",
+    "final": "proxy",
+	"rules": [
+      {
+        "protocol": "dns",
+        "action": "hijack-dns"
+      }
+    ],
+    "rule_set": []
+  }
+}
