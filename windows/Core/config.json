@@ -3,13 +3,19 @@
     "level": "info",
     "timestamp": true
   },
+  "experimental": {
+    "cache_file": {
+      "enabled": true,
+      "path": "cache.db"
+    }
+  },
   "dns": {
     "servers": [
       {
 		"type": "tcp",
         "tag": "cloudflare",
         "server": "1.1.1.1",
-        "detour": "night-ebh0sgf4w"
+        "detour": "proxy"
       },
 	  {
         "type": "local",
@@ -44,7 +50,7 @@
 		"sniff_override_destination": false,
 		"tag": "mixed-in",
 		"type": "mixed"
-	},
+	}
   ],
   "outbounds": [
     {

@@ -1,1 +1,33 @@
-.idea
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+Icon
+._*
+
+# Xcode / Swift
+.build/
+.swiftpm/
+*.o
+*.d
+*.swp
+DerivedData/
+*.xcuserstate
+
+# Build artifacts
+Midnight.app/
+Midnight.dmg
+dmg_tmp/
+
+# Windows
+Thumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+midnight.exe
+MidnightInstaller.exe
+
+# IDE
+.vscode/
+.idea/
+*.suo
+*.user

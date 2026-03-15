@@ -1,0 +1,108 @@
+{
+  "log": {
+    "level": "info",
+    "timestamp": true
+  },
+  "experimental": {
+    "cache_file": {
+      "enabled": true,
+      "path": "cache.db"
+    }
+  },
+  "dns": {
+    "servers": [
+      {
+        "type": "tcp",
+        "tag": "proxy-dns",
+        "server": "1.1.1.1",
+        "detour": "proxy"
+      },
+      {
+        "type": "udp",
+        "tag": "direct-dns",
+        "server": "1.1.1.1"
+      }
+    ],
+    "rules": [],
+    "strategy": "prefer_ipv4",
+    "final": "proxy-dns",
+    "disable_cache": false,
+    "disable_expire": false,
+    "independent_cache": false
+  },
+  "inbounds": [
+    {
+      "type": "tun",
+      "tag": "tun-in",
+      "address": [
+        "172.16.0.1/30"
+      ],
+      "mtu": 1492,
+      "auto_route": true,
+      "strict_route": false,
+      "stack": "system"
+    },
+    {
+      "type": "mixed",
+      "tag": "proxy-in",
+      "listen": "127.0.0.1",
+      "listen_port": 7890,
+      "sniff": true,
+      "sniff_override_destination": true,
+      "set_system_proxy": true
+    }
+  ],
+  "outbounds": [
+    {
+      "type": "vless",
+      "tag": "proxy",
+      "server": "",
+      "server_port": 11111,
+      "uuid": "",
+      "flow": "",
+      "tls": {
+        "enabled": true,
+        "server_name": "",
+        "utls": {
+          "enabled": true,
+          "fingerprint": ""
+        },
+        "reality": {
+          "enabled": true,
+          "public_key": "",
+          "short_id": ""
+        }
+      }
+    },
+    {
+      "type": "direct",
+      "tag": "direct"
+    },
+    {
+      "type": "block",
+      "tag": "block"
+    }
+  ],
+  "route": {
+    "auto_detect_interface": true,
+    "default_domain_resolver": "proxy-dns",
+    "final": "proxy",
+    "rules": [
+      {
+        "action": "resolve",
+        "inbound": "tun-in",
+        "strategy": "prefer_ipv4"
+      },
+      {
+        "action": "sniff",
+        "inbound": "tun-in",
+        "timeout": "1s"
+      },
+      {
+        "protocol": "dns",
+        "action": "hijack-dns"
+      }
+    ],
+    "rule_set": []
+  }
+}

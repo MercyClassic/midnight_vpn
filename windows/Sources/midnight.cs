@@ -7,7 +7,6 @@ using System.Text;
 using System.Windows.Forms;
 using System.Security.Principal;
 
-
 class SingboxTrayApp : ApplicationContext
 {
     private NotifyIcon notifyIcon;
@@ -16,7 +15,9 @@ class SingboxTrayApp : ApplicationContext
     private StreamWriter logWriter;
     private ToolStripMenuItem logMenuItem;
     private ToolStripMenuItem vpnMenuItem;
-	private string appDir;
+    private ToolStripMenuItem configMenuItem;
+    private string appDir;
+    private string currentConfigPath;
 
     private StringBuilder buffer = new StringBuilder();
     private readonly object bufferLock = new object();
@@ -27,11 +28,11 @@ class SingboxTrayApp : ApplicationContext
 
     public SingboxTrayApp()
     {
-        appDir = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "core");
+        appDir = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Core");
         string exePath = Path.Combine(appDir, "sing-box.exe");
-        string configPath = Path.Combine(appDir, "config.json");
+        currentConfigPath = Path.Combine(appDir, "config.json");
 
-        StartSingbox(exePath, appDir, configPath);
+        StartSingbox(exePath, appDir, currentConfigPath);
 
         ContextMenuStrip menu = new ContextMenuStrip();
 
@@ -40,27 +41,60 @@ class SingboxTrayApp : ApplicationContext
         menu.Items.Add(logMenuItem);
 
         vpnMenuItem = new ToolStripMenuItem("Disable VPN");
-        vpnMenuItem.Click += (s, e) => ToggleVpn(exePath, appDir, configPath);
+        vpnMenuItem.Click += (s, e) => ToggleVpn(exePath);
         menu.Items.Add(vpnMenuItem);
 
-		ToolStripMenuItem editConfigItem = new ToolStripMenuItem("Edit config");
-		editConfigItem.Click += (s, e) => EditConfig(configPath);
-		menu.Items.Add(editConfigItem);
+        ToolStripMenuItem editConfigItem = new ToolStripMenuItem("Edit config");
+        editConfigItem.Click += (s, e) => EditConfig(currentConfigPath);
+        menu.Items.Add(editConfigItem);
+		
+        configMenuItem = new ToolStripMenuItem("Config");
+		configMenuItem.DropDownOpening += (s, e) => LoadConfigMenu(exePath);
+		menu.Items.Add(configMenuItem);
 
-		menu.Items.Add(new ToolStripSeparator());
+        menu.Items.Add(new ToolStripSeparator());
 
         ToolStripMenuItem exitItem = new ToolStripMenuItem("Exit");
         exitItem.Click += (s, e) => ExitApp();
         menu.Items.Add(exitItem);
 
         notifyIcon = new NotifyIcon();
-        string iconPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "icons", "gear.ico");
+        string iconPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Assets", "gear.ico");
         notifyIcon.Icon = File.Exists(iconPath) ? new Icon(iconPath) : SystemIcons.Application;
         notifyIcon.Text = "sing-box";
         notifyIcon.ContextMenuStrip = menu;
         notifyIcon.Visible = true;
 
         Application.ApplicationExit += (s, e) => { notifyIcon.Visible = false; };
+    }
+
+    private void LoadConfigMenu(string exePath)
+    {
+        configMenuItem.DropDownItems.Clear();
+
+        string[] configs = Directory.GetFiles(appDir, "*.json");
+
+        foreach (string cfg in configs)
+        {
+            string name = Path.GetFileNameWithoutExtension(cfg);
+            ToolStripMenuItem item = new ToolStripMenuItem(name);
+            item.Checked = cfg == currentConfigPath;
+
+            item.Click += (s, e) =>
+            {
+                currentConfigPath = cfg;
+
+                foreach (ToolStripMenuItem i in configMenuItem.DropDownItems)
+                    i.Checked = false;
+                item.Checked = true;
+
+                StopSingbox();
+                StartSingbox(exePath, appDir, currentConfigPath);
+                vpnMenuItem.Text = "Disable VPN";
+            };
+
+            configMenuItem.DropDownItems.Add(item);
+        }
     }
 
     private void StartSingbox(string exePath, string appDir, string configPath)
@@ -113,14 +147,13 @@ class SingboxTrayApp : ApplicationContext
     {
         if (logViewerProcess == null || logViewerProcess.HasExited)
         {
-			logViewerProcess = new Process();
-			logViewerProcess.StartInfo.FileName = Path.Combine(appDir, "logger.exe");
-			logViewerProcess.StartInfo.Arguments = "16 Consolas";
-			logViewerProcess.StartInfo.UseShellExecute = false;
-			logViewerProcess.StartInfo.RedirectStandardInput = true;
-			logViewerProcess.StartInfo.CreateNoWindow = false;
-			logViewerProcess.EnableRaisingEvents = true;
-
+            logViewerProcess = new Process();
+            logViewerProcess.StartInfo.FileName = Path.Combine(appDir, "logger.exe");
+            logViewerProcess.StartInfo.Arguments = "16 Consolas";
+            logViewerProcess.StartInfo.UseShellExecute = false;
+            logViewerProcess.StartInfo.RedirectStandardInput = true;
+            logViewerProcess.StartInfo.CreateNoWindow = false;
+            logViewerProcess.EnableRaisingEvents = true;
 
             logViewerProcess.Exited += (s, e) =>
             {
@@ -154,34 +187,44 @@ class SingboxTrayApp : ApplicationContext
             logMenuItem.Text = "Show logs";
         }
     }
-	
-	private void EditConfig(string configPath)
-	{
-		try
-		{
-			string notepadpp = @"C:\Apps\Notepad++\notepad++.exe";
 
-			if (File.Exists(notepadpp))
-			{
-				Process.Start(notepadpp, "\"" + configPath + "\"");
-			}
-			else
-			{
-				Process.Start("notepad.exe", "\"" + configPath + "\"");
-			}
-		}
-		catch (Exception ex)
-		{
-			MessageBox.Show("Не удалось открыть config.json:\n" + ex.Message,
-							"Ошибка", MessageBoxButtons.OK, MessageBoxIcon.Error);
-		}
-	}
+    private void EditConfig(string configPath)
+    {
+        string[] editors = {
+            Environment.ExpandEnvironmentVariables(@"%ProgramFiles%\Notepad++\notepad++.exe"),
+            Environment.ExpandEnvironmentVariables(@"%ProgramFiles(x86)%\Notepad++\notepad++.exe"),
+            Environment.ExpandEnvironmentVariables(@"%LocalAppData%\Programs\Notepad++\notepad++.exe"),
+        };
 
-    private void ToggleVpn(string exePath, string appDir, string configPath)
+        foreach (string editor in editors)
+        {
+            if (File.Exists(editor))
+            {
+                try
+                {
+                    Process.Start(editor, "\"" + configPath + "\"");
+                    return;
+                }
+                catch { }
+            }
+        }
+
+        try
+        {
+            Process.Start("notepad.exe", "\"" + configPath + "\"");
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show("Не удалось открыть файл конфигурации:\n" + ex.Message,
+                "Ошибка", MessageBoxButtons.OK, MessageBoxIcon.Error);
+        }
+    }
+
+    private void ToggleVpn(string exePath)
     {
         if (singboxProcess == null || singboxProcess.HasExited)
         {
-            StartSingbox(exePath, appDir, configPath);
+            StartSingbox(exePath, appDir, currentConfigPath);
             vpnMenuItem.Text = "Disable VPN";
         }
         else
@@ -199,14 +242,14 @@ class SingboxTrayApp : ApplicationContext
         Application.Exit();
     }
 
-	private static bool IsRunAsAdmin()
+    private static bool IsRunAsAdmin()
     {
         WindowsIdentity id = WindowsIdentity.GetCurrent();
         WindowsPrincipal principal = new WindowsPrincipal(id);
         return principal.IsInRole(WindowsBuiltInRole.Administrator);
     }
 
-	private static void RestartAsAdmin()
+    private static void RestartAsAdmin()
     {
         string exePath = Application.ExecutablePath;
         ProcessStartInfo psi = new ProcessStartInfo(exePath);
@@ -219,8 +262,8 @@ class SingboxTrayApp : ApplicationContext
     static void Main()
     {
         Application.EnableVisualStyles();
-		
-		if (!IsRunAsAdmin())
+
+        if (!IsRunAsAdmin())
         {
             DialogResult result = MessageBox.Show(
                 "Приложение запущено без прав администратора.\n\n" +
@@ -231,12 +274,10 @@ class SingboxTrayApp : ApplicationContext
                 MessageBoxIcon.Warning);
 
             if (result == DialogResult.Yes)
-            {
                 RestartAsAdmin();
-            }
             return;
         }
-		
+
         Application.Run(new SingboxTrayApp());
     }
 }
