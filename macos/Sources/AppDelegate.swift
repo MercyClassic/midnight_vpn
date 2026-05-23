@@ -7,16 +7,32 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     let configManager = ConfigManager()
     lazy var logWindowController = LogWindowController()
 
+    private var logBuffer: [String] = []
+    private var logFlushScheduled = false
+
     func applicationDidFinishLaunching(_ notification: Notification) {
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
-        
+
         if let image = NSImage(contentsOfFile: Bundle.main.path(forResource: "gear", ofType: "png") ?? "") {
             image.size = NSSize(width: 18, height: 18)
             statusItem.button?.image = image
         }
 
+        // Батчим логи порциями раз в 100ms — не заваливаем main thread
         vpnManager.onLog = { [weak self] line in
-            self?.logWindowController.appendLog(line)
+            guard let self else { return }
+            NSLog("[DIAG] onLog received: \(line.prefix(60))")
+            self.logBuffer.append(line)
+            if !self.logFlushScheduled {
+                self.logFlushScheduled = true
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                    let lines = self.logBuffer.joined()
+                    self.logBuffer.removeAll()
+                    self.logFlushScheduled = false
+                    NSLog("[DIAG] flushing \(lines.count) chars to appendLog")
+                    self.logWindowController.appendLog(lines)
+                }
+            }
         }
 
         if let config = configManager.getCurrentConfig() {
@@ -31,18 +47,18 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
     func rebuildMenu() {
         let menu = NSMenu()
-        
+
         let toggleTitle = vpnManager.isRunning ? "Stop VPN 🟢" : "Start VPN 🔴"
         let toggleItem = NSMenuItem(title: toggleTitle, action: #selector(toggleVPN), keyEquivalent: "")
         toggleItem.target = self
         menu.addItem(toggleItem)
-        
+
         menu.addItem(NSMenuItem.separator())
-        
+
         let configMenuItem = NSMenuItem(title: "Config", action: nil, keyEquivalent: "")
         let configMenu = NSMenu()
         let configs = configManager.loadConfigs()
-        
+
         for config in configs {
             let title = config.deletingPathExtension().lastPathComponent
             let item = NSMenuItem(title: title, action: #selector(selectConfig(_:)), keyEquivalent: "")
@@ -53,24 +69,24 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         }
         configMenuItem.submenu = configMenu
         menu.addItem(configMenuItem)
-        
+
         let editItem = NSMenuItem(title: "Edit Config", action: #selector(editConfig), keyEquivalent: "")
         editItem.target = self
         menu.addItem(editItem)
-        
+
         let logItem = NSMenuItem(title: "View Logs", action: #selector(viewLogs), keyEquivalent: "")
         logItem.target = self
         menu.addItem(logItem)
-        
+
         menu.addItem(NSMenuItem.separator())
-        
+
         let quitItem = NSMenuItem(title: "Quit", action: #selector(quit), keyEquivalent: "")
         quitItem.target = self
         menu.addItem(quitItem)
-        
+
         statusItem.menu = menu
     }
-    
+
     @objc func toggleVPN() {
         if vpnManager.isRunning {
             vpnManager.stopVPN()
