@@ -41,12 +41,13 @@ final class LogTextView: NSTextView {
 
 class LogWindowController: NSWindowController, NSWindowDelegate {
 
-    private var textView: NSTextView!
+    private var textView: LogTextView!
     private var scrollView: NSScrollView!
 
     private let maxLines = 2000
-    private let trimChunk = 500
-    private var lineCount = 0
+    private var lines: [String] = []
+
+    private var windowVisible = false
 
     convenience init() {
         let window = NSPanel(
@@ -78,15 +79,29 @@ class LogWindowController: NSWindowController, NSWindowDelegate {
         scrollView.hasHorizontalScroller = false
         scrollView.drawsBackground = false
 
-        textView = LogTextView(frame: scrollView.bounds)
+        let contentSize = scrollView.contentSize
+
+        textView = LogTextView(frame: NSRect(origin: .zero, size: contentSize))
         textView.isEditable = false
         textView.isSelectable = true
         textView.drawsBackground = false
         textView.font = .monospacedSystemFont(ofSize: 11.5, weight: .regular)
-        textView.autoresizingMask = [.width]
         textView.textContainerInset = NSSize(width: 10, height: 10)
         textView.allowsUndo = false
         textView.usesFindBar = false
+
+        textView.isVerticallyResizable = true
+        textView.isHorizontallyResizable = false
+        textView.autoresizingMask = [.width]
+        textView.textContainer?.widthTracksTextView = true
+        textView.textContainer?.containerSize = NSSize(
+            width: contentSize.width,
+            height: .greatestFiniteMagnitude
+        )
+        textView.maxSize = NSSize(
+            width: contentSize.width,
+            height: .greatestFiniteMagnitude
+        )
 
         scrollView.documentView = textView
         window!.contentView!.addSubview(scrollView)
@@ -97,10 +112,15 @@ class LogWindowController: NSWindowController, NSWindowDelegate {
         NSApp.activate(ignoringOtherApps: true)
         window?.makeKeyAndOrderFront(sender)
         window?.makeFirstResponder(textView)
+
+        windowVisible = true
+        renderAll()
     }
 
     func windowShouldClose(_ sender: NSWindow) -> Bool {
         sender.orderOut(nil)
+        windowVisible = false
+        textView.string = ""
         return false
     }
 
@@ -110,41 +130,58 @@ class LogWindowController: NSWindowController, NSWindowDelegate {
 
     func appendLog(_ raw: String) {
         let clean = stripANSI(raw)
-        let lines = clean.components(separatedBy: "\n").filter { !$0.isEmpty }
-        guard !lines.isEmpty, let storage = textView.textStorage else { return }
+        let newLines = clean.components(separatedBy: "\n").filter { !$0.isEmpty }
+        guard !newLines.isEmpty else { return }
+
+        lines.append(contentsOf: newLines)
+        if lines.count > maxLines {
+            lines.removeFirst(lines.count - maxLines)
+        }
+
+        guard windowVisible, let storage = textView.textStorage else { return }
 
         let stickToBottom = isScrolledToBottom()
 
         let batch = NSMutableAttributedString()
-        for line in lines {
+        for line in newLines {
             batch.append(colorize(line))
             batch.append(NSAttributedString(string: "\n"))
         }
-
         storage.append(batch)
-        lineCount += lines.count
 
-        trimIfNeeded()
+        trimViewToBuffer()
 
         if stickToBottom {
             textView.scrollToEndOfDocument(nil)
         }
     }
 
-    private func isScrolledToBottom() -> Bool {
-        let clip = scrollView.contentView
-        let docHeight = textView.frame.height
-        if docHeight <= clip.bounds.height { return true }
-        let visibleMaxY = clip.bounds.origin.y + clip.bounds.height
-        return visibleMaxY >= docHeight - 40
+    private func renderAll() {
+        guard let storage = textView.textStorage else { return }
+        let full = NSMutableAttributedString()
+        for line in lines {
+            full.append(colorize(line))
+            full.append(NSAttributedString(string: "\n"))
+        }
+        storage.setAttributedString(full)
+        textView.scrollToEndOfDocument(nil)
     }
 
-    private func trimIfNeeded() {
-        guard lineCount > maxLines, let storage = textView.textStorage else { return }
-
-        let toRemove = max(trimChunk, lineCount - maxLines)
+    private func trimViewToBuffer() {
+        guard let storage = textView.textStorage else { return }
         let nsString = storage.string as NSString
 
+        var viewLineCount = 0
+        nsString.enumerateSubstrings(
+            in: NSRange(location: 0, length: nsString.length),
+            options: [.byLines, .substringNotRequired]
+        ) { _, _, _, _ in
+            viewLineCount += 1
+        }
+
+        guard viewLineCount > maxLines else { return }
+
+        let toRemove = viewLineCount - maxLines
         var found = 0
         var cutIndex = 0
         nsString.enumerateSubstrings(
@@ -160,13 +197,22 @@ class LogWindowController: NSWindowController, NSWindowDelegate {
 
         if cutIndex > 0 {
             storage.deleteCharacters(in: NSRange(location: 0, length: cutIndex))
-            lineCount -= found
         }
     }
 
     func clearLogs() {
-        textView.string = ""
-        lineCount = 0
+        lines.removeAll()
+        if windowVisible {
+            textView.string = ""
+        }
+    }
+
+    private func isScrolledToBottom() -> Bool {
+        let clip = scrollView.contentView
+        let docHeight = textView.frame.height
+        if docHeight <= clip.bounds.height { return true }
+        let visibleMaxY = clip.bounds.origin.y + clip.bounds.height
+        return visibleMaxY >= docHeight - 40
     }
 
     private func stripANSI(_ text: String) -> String {
