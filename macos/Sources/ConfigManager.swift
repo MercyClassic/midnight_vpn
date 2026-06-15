@@ -40,7 +40,9 @@ class ConfigManager {
             return []
         }
 
-        return files.filter { $0.pathExtension == "json" }
+        return files
+            .filter { $0.pathExtension == "json" }
+            .sorted { $0.lastPathComponent.localizedStandardCompare($1.lastPathComponent) == .orderedAscending }
     }
 
     func setCurrentConfig(_ url: URL) {
