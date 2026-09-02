@@ -1,0 +1,9 @@
+{
+  "core_rules": {
+    "rules": [
+      { "action": "resolve", "inbound": "tun-in", "strategy": "prefer_ipv4" },
+      { "action": "sniff", "inbound": "tun-in", "timeout": "1s" },
+      { "protocol": "dns", "action": "hijack-dns" }
+    ]
+  }
+}

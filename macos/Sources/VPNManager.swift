@@ -15,9 +15,9 @@ class VPNManager {
         queue.sync { running }
     }
 
-    func startVPN(configPath: String) {
+    func startVPN(configPath: String, workingDirectory: URL? = nil) {
         queue.async { [weak self] in
-            self?.startLocked(configPath: configPath)
+            self?.startLocked(configPath: configPath, workingDirectory: workingDirectory)
         }
     }
 
@@ -27,16 +27,16 @@ class VPNManager {
         }
     }
 
-    func restartVPN(configPath: String) {
+    func restartVPN(configPath: String, workingDirectory: URL? = nil) {
         queue.async { [weak self] in
             self?.stopLocked()
-            self?.startLocked(configPath: configPath)
+            self?.startLocked(configPath: configPath, workingDirectory: workingDirectory)
         }
     }
 
     // MARK: - Private (всегда на queue)
 
-    private func startLocked(configPath: String) {
+    private func startLocked(configPath: String, workingDirectory: URL?) {
         // На случай если поверх уже запущенного — гасим старый.
         if process != nil {
             stopLocked()
@@ -48,7 +48,7 @@ class VPNManager {
         self.outputPipe = pipe
 
         let configURL = URL(fileURLWithPath: configPath)
-        process.currentDirectoryURL = configURL.deletingLastPathComponent()
+        process.currentDirectoryURL = workingDirectory ?? configURL.deletingLastPathComponent()
 
         process.executableURL = URL(fileURLWithPath: "/usr/bin/sudo")
         process.arguments = ["/opt/homebrew/bin/sing-box", "run", "-c", configPath]

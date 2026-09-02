@@ -1,0 +1,38 @@
+{
+  "base": [
+    { "type": "direct", "tag": "direct" },
+    { "type": "block", "tag": "block" }
+  ],
+  "proxy1": [
+    {
+      "type": "vless",
+      "tag": "proxy1",
+      "server": "",
+      "server_port": 11111,
+      "uuid": "",
+      "flow": "",
+      "tls": {
+        "enabled": true,
+        "server_name": "",
+        "utls": { "enabled": true, "fingerprint": "" },
+        "reality": { "enabled": true, "public_key": "", "short_id": "" }
+      }
+    }
+  ],
+  "proxy2": [
+    {
+      "type": "vless",
+      "tag": "proxy2",
+      "server": "",
+      "server_port": 22222,
+      "uuid": "",
+      "flow": "",
+      "tls": {
+        "enabled": true,
+        "server_name": "",
+        "utls": { "enabled": true, "fingerprint": "" },
+        "reality": { "enabled": true, "public_key": "", "short_id": "" }
+      }
+    }
+  ]
+}

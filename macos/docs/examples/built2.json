@@ -1,0 +1,29 @@
+{
+  "$extends": [
+    "common.json",
+    "outbounds.json#base:outbounds",
+    "outbounds.json#proxy2:outbounds",
+    "dns.json#base:dns",
+    "dns.json#proxy2:dns",
+    "route.json#core_rules:route"
+  ],
+
+  "dns": {
+    "rules": [],
+    "strategy": "prefer_ipv4",
+    "final": "proxy2-dns",
+    "disable_cache": false,
+    "disable_expire": false,
+    "independent_cache": false
+  },
+
+  "route": {
+    "auto_detect_interface": true,
+    "default_domain_resolver": "proxy2-dns",
+    "final": "proxy2",
+    "rules": [
+      { "domain_suffix": "$ref:values.json#direct_domains", "outbound": "direct" }
+    ],
+    "rule_set": []
+  }
+}

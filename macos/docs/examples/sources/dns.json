@@ -1,0 +1,17 @@
+{
+  "base": {
+    "servers": [
+      { "type": "udp", "tag": "direct-dns", "server": "1.1.1.1" }
+    ]
+  },
+  "proxy1": {
+    "servers": [
+      { "type": "tcp", "tag": "proxy1-dns", "server": "1.1.1.1", "detour": "proxy1" }
+    ]
+  },
+  "proxy2": {
+    "servers": [
+      { "type": "tcp", "tag": "proxy2-dns", "server": "1.1.1.1", "detour": "proxy2" }
+    ]
+  }
+}

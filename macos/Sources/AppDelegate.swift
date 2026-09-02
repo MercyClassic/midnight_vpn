@@ -5,6 +5,9 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     var statusItem: NSStatusItem!
     let vpnManager = VPNManager()
     let configManager = ConfigManager()
+    lazy var configResolver = ConfigResolver(
+        baseDir: configManager.configDir.deletingLastPathComponent()
+    )
     lazy var logWindowController = LogWindowController()
 
     private var logBuffer: [String] = []
@@ -37,7 +40,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
         if let config = configManager.getCurrentConfig() {
             NSLog("Starting VPN with config: \(config.path)")
-            vpnManager.startVPN(configPath: config.path)
+            startVPN(withOriginalConfig: config)
         } else {
             NSLog("No config found")
         }
@@ -74,6 +77,10 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         editItem.target = self
         menu.addItem(editItem)
 
+        let builtItem = NSMenuItem(title: "Preview Config", action: #selector(viewBuiltConfig), keyEquivalent: "")
+        builtItem.target = self
+        menu.addItem(builtItem)
+
         let logItem = NSMenuItem(title: "View Logs", action: #selector(viewLogs), keyEquivalent: "")
         logItem.target = self
         menu.addItem(logItem)
@@ -92,7 +99,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             vpnManager.stopVPN()
         } else {
             guard let config = configManager.getCurrentConfig() else { return }
-            vpnManager.startVPN(configPath: config.path)
+            startVPN(withOriginalConfig: config)
         }
         rebuildMenu()
     }
@@ -102,9 +109,9 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         configManager.setCurrentConfig(config)
         logWindowController.clearLogs()
         if vpnManager.isRunning {
-            vpnManager.restartVPN(configPath: config.path)
+            restartVPN(withOriginalConfig: config)
         } else {
-            vpnManager.startVPN(configPath: config.path)
+            startVPN(withOriginalConfig: config)
         }
         rebuildMenu()
     }
@@ -115,6 +122,47 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         task.executableURL = URL(fileURLWithPath: "/usr/bin/open")
         task.arguments = ["-a", "CotEditor", config.path]
         try? task.run()
+    }
+
+    @objc func viewBuiltConfig() {
+        guard let config = configManager.getCurrentConfig() else { return }
+        guard let builtPath = resolvedPath(for: config) else { return }
+        let task = Process()
+        task.executableURL = URL(fileURLWithPath: "/usr/bin/open")
+        task.arguments = ["-a", "CotEditor", builtPath]
+        try? task.run()
+    }
+
+    private func startVPN(withOriginalConfig config: URL) {
+        guard let resolvedPath = resolvedPath(for: config) else { return }
+        vpnManager.startVPN(
+            configPath: resolvedPath,
+            workingDirectory: config.deletingLastPathComponent()
+        )
+    }
+
+    private func restartVPN(withOriginalConfig config: URL) {
+        guard let resolvedPath = resolvedPath(for: config) else { return }
+        vpnManager.restartVPN(
+            configPath: resolvedPath,
+            workingDirectory: config.deletingLastPathComponent()
+        )
+    }
+
+    private func resolvedPath(for config: URL) -> String? {
+        do {
+            return try configResolver.resolve(configURL: config).path
+        } catch {
+            let message = error.localizedDescription
+            NSLog("Config resolve failed for \(config.lastPathComponent): \(message)")
+
+            let alert = NSAlert()
+            alert.alertStyle = .warning
+            alert.messageText = "Не удалось собрать конфиг"
+            alert.informativeText = "\(config.lastPathComponent): \(message)"
+            alert.runModal()
+            return nil
+        }
     }
 
     @objc func viewLogs() {
