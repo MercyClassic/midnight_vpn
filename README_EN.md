@@ -12,6 +12,7 @@
 - **View live logs**
 - **Edit config in external editor**
 - **Create config by pattern _(only for macOS)_**
+- **Distribute configs by groups _(only for macOS)_**
 - **Quit client**
 
 ## Screenshots

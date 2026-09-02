@@ -60,15 +60,37 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
         let configMenuItem = NSMenuItem(title: "Config", action: nil, keyEquivalent: "")
         let configMenu = NSMenu()
-        let configs = configManager.loadConfigs()
+        configMenu.minimumWidth = 180
+        let groups = configManager.loadConfigGroups()
+        let currentConfig = configManager.getCurrentConfig()
 
-        for config in configs {
-            let title = config.deletingPathExtension().lastPathComponent
-            let item = NSMenuItem(title: title, action: #selector(selectConfig(_:)), keyEquivalent: "")
-            item.representedObject = config
-            item.target = self
-            item.state = configManager.getCurrentConfig() == config ? .on : .off
-            configMenu.addItem(item)
+        for (index, group) in groups.enumerated() {
+            if index > 0 {
+                configMenu.addItem(NSMenuItem.separator())
+            }
+
+            if let displayName = group.displayName {
+                let headerItem = NSMenuItem(title: "", action: nil, keyEquivalent: "")
+                headerItem.attributedTitle = NSAttributedString(
+                    string: displayName.uppercased(),
+                    attributes: [
+                        .font: NSFont.systemFont(ofSize: 10, weight: .semibold),
+                        .foregroundColor: NSColor.secondaryLabelColor,
+                        .kern: 0.4
+                    ]
+                )
+                headerItem.isEnabled = false
+                configMenu.addItem(headerItem)
+            }
+
+            for config in group.configs {
+                let title = config.deletingPathExtension().lastPathComponent
+                let item = NSMenuItem(title: title, action: #selector(selectConfig(_:)), keyEquivalent: "")
+                item.representedObject = config
+                item.target = self
+                item.state = currentConfig == config ? .on : .off
+                configMenu.addItem(item)
+            }
         }
         configMenuItem.submenu = configMenu
         menu.addItem(configMenuItem)
@@ -137,7 +159,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         guard let resolvedPath = resolvedPath(for: config) else { return }
         vpnManager.startVPN(
             configPath: resolvedPath,
-            workingDirectory: config.deletingLastPathComponent()
+            workingDirectory: configManager.configDir.deletingLastPathComponent()
         )
     }
 
@@ -145,7 +167,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         guard let resolvedPath = resolvedPath(for: config) else { return }
         vpnManager.restartVPN(
             configPath: resolvedPath,
-            workingDirectory: config.deletingLastPathComponent()
+            workingDirectory: configManager.configDir.deletingLastPathComponent()
         )
     }
 

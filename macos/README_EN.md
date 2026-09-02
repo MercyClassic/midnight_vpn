@@ -10,11 +10,15 @@
 - **Preview built config**
 - **Quit**
 
-### Screenshots:
+## Screenshots
 
 ### Tray
 
 <img src="docs/images/tray.png" width="300"/>
+
+Config grouping is done by creating subfolders in `~/Library/Application Support/Midnight/configs/`.
+If necessary, you can add an index to the folder name to sort them in the list. For example, `another group.1`, `main.2`, etc.
+Lower indices place the group higher in the list.
 
 ### Logs
 
