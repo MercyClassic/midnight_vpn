@@ -6,6 +6,7 @@ enum ConfigResolverError: LocalizedError {
     case invalidRoot(String)
     case keyNotFound(String, String)
     case refTooDeep(String)
+    case circularReference(String)
 
     var errorDescription: String? {
         switch self {
@@ -18,7 +19,9 @@ enum ConfigResolverError: LocalizedError {
         case .keyNotFound(let key, let file):
             return "Key \"\(key)\" not found in \(file)"
         case .refTooDeep(let ref):
-            return "$ref chain too deep (possible circular reference): \(ref)"
+            return "$ref chain too deep: \(ref)"
+        case .circularReference(let ref):
+            return "Circular reference detected: \(ref)"
         }
     }
 }
@@ -69,27 +72,35 @@ final class ConfigResolver {
         return outURL
     }
 
+    private var rawFileCache: [String: [String: Any]] = [:]
+    private var resolvedValueCache: [String: Any] = [:]
+    private var resolvingStack: Set<String> = []
+
     private func loadFragment(entry: String) throws -> [String: Any] {
         let parts = entry.split(separator: "#", maxSplits: 1).map(String.init)
         let fileName = parts[0]
-        let full = try loadJSONObject(fileName: fileName)
 
         guard parts.count == 2 else {
-            return full
+            let raw = try loadRawFile(fileName)
+            var result: [String: Any] = [:]
+            for key in raw.keys {
+                result[key] = try resolvedValue(fileName: fileName, key: key, depth: 0)
+            }
+            return result
         }
 
         let keyParts = parts[1].split(separator: ":", maxSplits: 1).map(String.init)
         let sourceKey = keyParts[0]
         let targetKey = keyParts.count == 2 ? keyParts[1] : sourceKey
 
-        guard let value = full[sourceKey] else {
-            throw ConfigResolverError.keyNotFound(sourceKey, fileName)
-        }
-
+        let value = try resolvedValue(fileName: fileName, key: sourceKey, depth: 0)
         return [targetKey: value]
     }
 
-    private func loadJSONObject(fileName: String, depth: Int = 0) throws -> [String: Any] {
+    private func loadRawFile(_ fileName: String) throws -> [String: Any] {
+        if let cached = rawFileCache[fileName] {
+            return cached
+        }
         let url = sourcesDir.appendingPathComponent(fileName)
         guard let data = try? Data(contentsOf: url) else {
             throw ConfigResolverError.sourceFileMissing(fileName)
@@ -97,24 +108,59 @@ final class ConfigResolver {
         guard let raw = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any] else {
             throw ConfigResolverError.invalidJSON(fileName)
         }
-        return (try resolveRefs(raw, depth: depth) as? [String: Any]) ?? raw
+        rawFileCache[fileName] = raw
+        return raw
+    }
+
+    private func resolvedValue(fileName: String, key: String, depth: Int) throws -> Any {
+        let cacheKey = "\(fileName)#\(key)"
+
+        if let cached = resolvedValueCache[cacheKey] {
+            return cached
+        }
+        guard !resolvingStack.contains(cacheKey) else {
+            throw ConfigResolverError.circularReference(cacheKey)
+        }
+        guard depth < Self.maxRefDepth else {
+            throw ConfigResolverError.refTooDeep(cacheKey)
+        }
+
+        let raw = try loadRawFile(fileName)
+        guard let rawValue = raw[key] else {
+            throw ConfigResolverError.keyNotFound(key, fileName)
+        }
+
+        resolvingStack.insert(cacheKey)
+        defer { resolvingStack.remove(cacheKey) }
+
+        let resolved = try resolveRefs(rawValue, depth: depth + 1)
+        resolvedValueCache[cacheKey] = resolved
+        return resolved
     }
 
     private static let maxRefDepth = 20
 
     private func resolveRefs(_ value: Any, depth: Int = 0) throws -> Any {
         if let str = value as? String, str.hasPrefix("$ref:") {
-            guard depth < Self.maxRefDepth else {
-                throw ConfigResolverError.refTooDeep(str)
-            }
             let ref = String(str.dropFirst(5))
             let parts = ref.split(separator: "#", maxSplits: 1).map(String.init)
             guard parts.count == 2 else { return value }
-            let full = try loadJSONObject(fileName: parts[0], depth: depth + 1)
-            guard let resolved = full[parts[1]] else {
+            return try resolvedValue(fileName: parts[0], key: parts[1], depth: depth)
+        }
+        if let dict = value as? [String: Any], let overrideStr = dict["$override"] as? String {
+            let ref = overrideStr.hasPrefix("$ref:") ? String(overrideStr.dropFirst(5)) : overrideStr
+            let parts = ref.split(separator: "#", maxSplits: 1).map(String.init)
+            guard parts.count == 2 else { return value }
+            guard let base = try resolvedValue(fileName: parts[0], key: parts[1], depth: depth) as? [String: Any] else {
                 throw ConfigResolverError.keyNotFound(parts[1], parts[0])
             }
-            return resolved
+            var overridden = base
+            if let overrides = dict["$set"] as? [String: Any] {
+                for (k, v) in overrides {
+                    overridden[k] = try resolveRefs(v, depth: depth + 1)
+                }
+            }
+            return overridden
         }
         if let dict = value as? [String: Any] {
             var result: [String: Any] = [:]

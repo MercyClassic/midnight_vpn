@@ -31,6 +31,7 @@ Configs in `configs/` can be either fully standalone, or pull shared pieces (out
 
 - **`"$extends": ["file.json#key:target"]`** — placed at the top of a config, pulls in a piece from `sources/`: `file.json` is which file, `key` is which key inside it to take, `target` is what name to place it under in the final config (omit it to keep the same name as `key`).
 - **`"$ref:file.json#key"`** — can be used as the value of any field inside a rule (e.g. instead of a list of domains/IPs), and it gets replaced with the array from `sources/`. That way the same list (your IPs, your domains) doesn't need to be copy-pasted into every config.
+- **`{"$override": "file.json#key", "$set": {...}}`** — used instead of `$ref` when you need not just the whole object as-is, but the same object with a few fields overridden on top. `$override` points to a base object in `sources/`, and `$set` lists which fields to replace or add. Handy when several objects (e.g. several outbounds pointing at the same server) are nearly identical and differ only in a couple of fields, like `uuid`/`tag`.
 
 The final (built) config is saved to `~/Library/Application Support/Midnight/build/` and that's what actually gets passed to `sing-box`. You can see the result via **`Preview Config`** in the tray.
 
