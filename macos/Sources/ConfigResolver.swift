@@ -62,14 +62,61 @@ final class ConfigResolver {
         let outURL = buildDir.appendingPathComponent(
             configURL.deletingPathExtension().lastPathComponent + ".json"
         )
-        let data = try JSONSerialization.data(withJSONObject: merged, options: [.prettyPrinted, .sortedKeys])
-        guard var text = String(data: data, encoding: .utf8) else {
-            throw ConfigResolverError.invalidRoot(configURL.lastPathComponent)
-        }
+        var text = try ConfigResolver.serializeOrdered(merged)
         text = text.replacingOccurrences(of: "\\/", with: "/")
         let cleanedData = Data(text.utf8)
         try cleanedData.write(to: outURL, options: .atomic)
         return outURL
+    }
+
+    private static let topLevelKeyOrder: [String] = [
+        "log",
+        "experimental",
+        "inbounds",
+        "dns",
+        "outbounds",
+        "endpoints",
+        "route",
+        "policy",
+        "api",
+        "metrics",
+        "stats"
+    ]
+
+    private static func orderedTopLevelKeys(_ dict: [String: Any]) -> [String] {
+        var ordered: [String] = []
+        for key in topLevelKeyOrder where dict[key] != nil {
+            ordered.append(key)
+        }
+        let known = Set(topLevelKeyOrder)
+        let remaining = dict.keys.filter { !known.contains($0) }.sorted()
+        return ordered + remaining
+    }
+
+    private static func serializeOrdered(_ merged: [String: Any]) throws -> String {
+        let orderedKeys = orderedTopLevelKeys(merged)
+        var parts: [String] = []
+
+        for key in orderedKeys {
+            guard let value = merged[key] else { continue }
+            let valueData = try JSONSerialization.data(withJSONObject: value, options: [.prettyPrinted, .sortedKeys])
+            guard let rawValueText = String(data: valueData, encoding: .utf8) else {
+                throw ConfigResolverError.invalidRoot("value for key \(key)")
+            }
+
+            let lines = rawValueText.components(separatedBy: "\n")
+            var reindented = lines[0]
+            for line in lines.dropFirst() {
+                reindented += "\n  " + line
+            }
+
+            let escapedKey = key
+                .replacingOccurrences(of: "\\", with: "\\\\")
+                .replacingOccurrences(of: "\"", with: "\\\"")
+            parts.append("  \"\(escapedKey)\": \(reindented)")
+        }
+
+        return "{\n" + parts.joined(separator: ",\n") + "\n}\n"
     }
 
     private var rawFileCache: [String: [String: Any]] = [:]
